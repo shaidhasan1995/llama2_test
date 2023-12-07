@@ -12,7 +12,7 @@ def main(
     temperature: float = 0.6,
     top_p: float = 0.9,
     max_seq_len: int = 512,
-    max_batch_size: int = 8,
+    max_batch_size: int = 8, #TODO try more vals
     max_gen_len: Optional[int] = None,
 ):
     """
@@ -36,25 +36,20 @@ def main(
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
     )
+    #TODO here please write code to call a hh_rlhf dataloader with batch size = max_batch_size and use it to generate logits
+    #then save those logits in a format friendly with the hh-rlhf dataset that shows what the logits for each token were 
 
     dialogs: List[Dialog] = [
-        [{"role": "user", "content": "what is the recipe of mayonnaise?"}],
+        [{"role": "user", "content": "hey, how are you, what is the recipe of mayonnaise?"}],
     ]
-    results = generator.chat_completion(
+    logits = generator.next_logits(
         dialogs,  # type: ignore
         max_gen_len=max_gen_len,
-        temperature=temperature,
-        logprobs = True,
+        temperature=0,
         top_p=top_p,
     )
+    print("logits.shape", logits.shape)
 
-    for dialog, result in zip(dialogs, results):
-        for msg in dialog:
-            print(f"{msg['role'].capitalize()}: {msg['content']}\n")
-        print(
-            f"> {result['generation']['role'].capitalize()}: {result['generation']['content']}"
-        )
-        print("\n==================================\n")
 
 
 if __name__ == "__main__":

@@ -430,6 +430,7 @@ class Transformer(nn.Module):
 
         """
         super().__init__()
+        print("params", params)
         self.params = params
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
