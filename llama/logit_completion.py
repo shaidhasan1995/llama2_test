@@ -4,7 +4,9 @@
 from typing import List, Optional
 import fire
 from llama import Llama, Dialog
+from torch.utils.data import Dataset, DataLoader
 
+from rlhf_data_loader import HHDataset
 
 def main(
     ckpt_dir: str,
@@ -36,19 +38,25 @@ def main(
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
     )
-    #TODO here please write code to call a hh_rlhf dataloader with batch size = max_batch_size and use it to generate logits
+    file_path = "./hh-rlhf/harmless-base/chosen_train.txt"
+    # TODO eventually just pass in all test/train files, train files will become train ds, test will be test ds
+    dataset = HHDataset(file_path)
+    dataloader = DataLoader(dataset, batch_size=max_batch_size, shuffle=True)
     #then save those logits in a format friendly with the hh-rlhf dataset that shows what the logits for each token were 
+    for idx, batch in enumerate(dataloader):
+        print(batch, idx)
+        # dialogs: List[Dialog] = [
+        #     [{"role": "user", "content": "hey, how are you, what is the recipe of mayonnaise?"}],
+        # ]
 
-    dialogs: List[Dialog] = [
-        [{"role": "user", "content": "hey, how are you, what is the recipe of mayonnaise?"}],
-    ]
-    logits = generator.next_logits(
-        dialogs,  # type: ignore
-        max_gen_len=max_gen_len,
-        temperature=0,
-        top_p=top_p,
-    )
-    print("logits.shape", logits.shape)
+        logits = generator.next_logits(
+            batch,  # type: ignore
+            max_gen_len=max_gen_len,
+            temperature=0,
+            top_p=top_p,
+        )
+        # print("logits.shape", logits.shape) yields bs, tokens, vocab_len tensor
+        # TODO here save this tensor 
 
 
 
