@@ -14,7 +14,7 @@ class StudentPLModule(pl.LightningModule):
         super(StudentPLModule, self).__init__()
         self.hparams = hparams
         self.model = Transformer(hparams)
-        self.collate_fn = TokenizationCollator()
+        self.collate_fn = TokenizationCollator(self.model.params)
         if self.hparams.loss_fn == 'smooth':
             self.loss_fn = self.smooth_loss
         elif self.hparams.loss_fn == 'cross_entropy':
@@ -66,14 +66,15 @@ class StudentPLModule(pl.LightningModule):
 
     def setup(self, stage=None):
         if stage == "fit":
+            #TODO redo all of below based off how save ds
             base_path = "./hh-rlhf2/"
-            train_file_name = 'train.jsonl.gz'
-            val_file_name = 'test.jsonl.gz' # using test split as validation
+            train_file_name = 'train.txt'
+            val_file_name = 'test.txt' # using test split as validation
             folders = ['harmless-base', 'helpful-base', 'helpful-online', 'helpful-rejection-sampled']
             train_folders = [os.path.join(base_path, folder, train_file_name) for folder in folders]
             val_folders = [os.path.join(base_path, folder, val_file_name) for folder in folders]
-            self.train_ds = HHDataset(train_folders)
-            self.val_ds = HHDataset(val_folders)
+            self.train_ds = HHDataset(train_folders, self.model.params)
+            self.val_ds = HHDataset(val_folders, self.model.params)
             print("len(self.train_ds)", len(self.train_ds))
             print("len(self.val_ds)", len(self.val_ds))
         else:
