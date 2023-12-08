@@ -5,9 +5,8 @@ import pytorch_lightning as pl
 import wandb  # Importing WandB for logging
 from llama.model import ModelArgs, Transformer
 import torch.nn.functional as F
-
-
-
+from rlhf_data_loader import HHDataset, TokenizationCollator
+import os
 
 # Define a function to calculate accuracy
 class StudentPLModule(pl.LightningModule):
@@ -15,6 +14,7 @@ class StudentPLModule(pl.LightningModule):
         super(StudentPLModule, self).__init__()
         self.hparams = hparams
         self.model = Transformer(hparams)
+        self.collate_fn = TokenizationCollator()
         if self.hparams.loss_fn == 'smooth':
             self.loss_fn = self.smooth_loss
         elif self.hparams.loss_fn == 'cross_entropy':
@@ -41,8 +41,7 @@ class StudentPLModule(pl.LightningModule):
         return loss
     
     def eval_step(self, batch, batch_idx, step_type):
-            text, teacher_logits = batch
-            #TODO do things with text that are done in generation.py (or add option to dataloader to do this)
+            tokens, teacher_logits = batch
             student_logits = self.model(tokens, start_pos=0)
             
             print("student_logits.shape", student_logits.shape, "teacher_logits.shape", teacher_logits.shape)
@@ -63,5 +62,33 @@ class StudentPLModule(pl.LightningModule):
                                                                         T_0=self.hparams.epochs+1,
                                                                         eta_min=self.hparams.learning_rate / 10)
         return [optimizer], [lr_scheduler]
+    
+
+    def setup(self, stage=None):
+        if stage == "fit":
+            base_path = "./hh-rlhf2/"
+            train_file_name = 'train.jsonl.gz'
+            val_file_name = 'test.jsonl.gz' # using test split as validation
+            folders = ['harmless-base', 'helpful-base', 'helpful-online', 'helpful-rejection-sampled']
+            train_folders = [os.path.join(base_path, folder, train_file_name) for folder in folders]
+            val_folders = [os.path.join(base_path, folder, val_file_name) for folder in folders]
+            self.train_ds = HHDataset(train_folders)
+            self.val_ds = HHDataset(val_folders)
+            print("len(self.train_ds)", len(self.train_ds))
+            print("len(self.val_ds)", len(self.val_ds))
+        else:
+            raise ValueError(f"Have not implemented stage {stage} yet")
+
+
+    def train_dataloader(self):
+        return DataLoader(self.train_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = True)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = False)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = False, shuffle = False)
+
 # TODO in dataloader callers add support for includes_rejected 
     
+

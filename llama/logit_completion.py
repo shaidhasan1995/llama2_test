@@ -5,7 +5,7 @@ from typing import List, Optional
 import fire
 from llama import Llama, Dialog
 from torch.utils.data import Dataset, DataLoader
-
+import os
 from rlhf_data_loader import HHDataset
 
 def main(
@@ -38,10 +38,16 @@ def main(
         max_seq_len=max_seq_len,
         max_batch_size=max_batch_size,
     )
-    file_path = "./hh-rlhf/harmless-base/chosen_train.txt"
-    # TODO eventually just pass in all test/train files, train files will become train ds, test will be test ds
-    dataset = HHDataset(file_path)
-    dataloader = DataLoader(dataset, batch_size=max_batch_size, shuffle=True)
+    base_path = "./hh-rlhf2/"
+    train_file_name = 'train.jsonl.gz'
+    val_file_name = 'test.jsonl.gz' # using test split as validation
+    folders = ['harmless-base', 'helpful-base', 'helpful-online', 'helpful-rejection-sampled']
+    train_folders = [os.path.join(base_path, folder, train_file_name) for folder in folders]
+    val_folders = [os.path.join(base_path, folder, val_file_name) for folder in folders]
+    combined = train_folders + val_folders
+    print("combined", combined)
+    dataset = HHDataset(combined)
+    dataloader = DataLoader(dataset, batch_size=max_batch_size, num_workers = 8, shuffle=False)
     #then save those logits in a format friendly with the hh-rlhf dataset that shows what the logits for each token were 
     for idx, batch in enumerate(dataloader):
         print(batch, idx)
@@ -56,7 +62,8 @@ def main(
             top_p=top_p,
         )
         # print("logits.shape", logits.shape) yields bs, tokens, vocab_len tensor
-        # TODO here save this tensor 
+        # TODO here save this tensor along with the text, see if possible to save token_id, logits? whatever allows for easy dataloading in the future
+
 
 
 

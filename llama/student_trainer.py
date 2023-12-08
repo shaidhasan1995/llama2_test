@@ -6,6 +6,7 @@ from student_pl_module import StudentPLModule
 from pytorch_lightning.callbacks import ModelCheckpoint
 import time
 import datetime
+from typing import Optional
 
 
 
@@ -37,26 +38,26 @@ if __name__ == '__main__':
                         type=float, default=3e-4)
     parser.add_argument("--includes_rejected", help="whether or not it includes rejected RLHF samples",
                         action="store_true", default=False)
-    # TODO add support for all below args
-    # class ModelArgs:
-    # dim: int = 4096
-    # n_layers: int = 32
-    # n_heads: int = 32
-    # n_kv_heads: Optional[int] = None
-    # vocab_size: int = -1  # defined later by tokenizer
-    # multiple_of: int = 256  # make SwiGLU hidden layer size multiple of large power of 2
-    # ffn_dim_multiplier: Optional[float] = None
-    # norm_eps: float = 1e-5
+    # TODO mess with below args to make model less than 700M params, particularly n_layers and multiple_of
+    parser.add_argument('--dim', type=int, default=4096, help='Dimension size')
+    parser.add_argument('--n_layers', type=int, default=32, help='Number of layers')
+    parser.add_argument('--n_heads', type=int, default=32, help='Number of heads')
+    parser.add_argument('--n_kv_heads', type=Optional[int], default=None, help='Number of key/value heads')
+    parser.add_argument('--vocab_size', type=int, default=-32000, help='Vocabulary size (defined later by tokenizer)')
+    parser.add_argument('--multiple_of', type=int, default=256, help='Multiple for SwiGLU hidden layer size')
+    parser.add_argument('--ffn_dim_multiplier', type=Optional[float], default=None, help='FFN dimension multiplier')
+    parser.add_argument('--norm_eps', type=float, default=1e-5, help='Normalization epsilon')
+    parser.add_argument('--max_seq_len', type=int, default=2048, help='Maximum sequence length')
 
-    # max_batch_size: int = 32
-    # max_seq_len: int = 2048
     # KD HPARAMS ####################################################
     parser.add_argument("-lr", "--learning_rate", help="learning rate",
                         type=float, default=3e-4)
     parser.add_argument("--weight_decay", help="weight_decay",
                         type=float, default=0)
-    parser.add_argument("-bs", "--batch_size", help="batch size",
+    parser.add_argument("-bs", "--max_batch_size", help="batch size",
                         type=int, default=32)
+    parser.add_argument("--num_workers", help="number of workers",
+                        type=int, default=8)
     parser.add_argument("-ep", "--epochs", help="epoch per validation cycle",
                         type=int, default=200)
     parser.add_argument("--epoch_save_rate", help="rate at which to save every X epochs",
