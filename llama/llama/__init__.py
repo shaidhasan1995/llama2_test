@@ -5,3 +5,5 @@ from .generation import Llama, Dialog
 from .model import ModelArgs, Transformer
 from .tokenizer import Tokenizer
 from .generation_pretokenized import Llama2
+from .manual_generation import Llama3
+

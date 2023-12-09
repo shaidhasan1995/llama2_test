@@ -6,6 +6,7 @@ from student_pl_module import StudentPLModule
 from pytorch_lightning.callbacks import ModelCheckpoint
 import time
 import datetime
+from datetime import datetime
 from typing import Optional
 
 
@@ -27,15 +28,16 @@ def main(args):
         every_n_epochs=args.epoch_save_rate  # Save every 5 epochs
     )
     model = StudentPLModule(args)
-    trainer = Trainer(gpus=-1, max_epochs = args.max_epochs, logger=wandb_logger, callbacks=[checkpoint_callback]) 
-    trainer.fit(model)
+    #TODO try manual training not using pl trainer
+    # trainer = Trainer(gpus=-1, max_epochs = args.max_epochs, logger=wandb_logger, callbacks=[checkpoint_callback]) 
+    # trainer.fit(model)
 
 if __name__ == '__main__':
     root_dir = os.path.dirname(os.path.realpath(__file__))
     parser = ArgumentParser()
     
     parser.add_argument("--loss_fn", help="loss function for KD",
-                        type=float, default=3e-4)
+                        type=str, default='smooth')
     parser.add_argument("--includes_rejected", help="whether or not it includes rejected RLHF samples",
                         action="store_true", default=False)
     # TODO mess with below args to make model less than 700M params, particularly n_layers and multiple_of

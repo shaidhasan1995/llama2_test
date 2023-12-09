@@ -48,7 +48,7 @@ SPECIAL_TAGS = [B_INST, E_INST, "<<SYS>>", "<</SYS>>"]
 UNSAFE_ERROR = "Error: special tags are not allowed as part of the prompt."
 
 
-class Llama2:
+class Llama3:
     @staticmethod
     def build(
         ckpt_dir: str,
@@ -57,7 +57,7 @@ class Llama2:
         max_batch_size: int,
         model_parallel_size: Optional[int] = None,
         seed: int = 1,
-    ) -> "Llama2":
+    ) -> "Llama3":
         """
         Build a Llama instance by initializing and loading a pre-trained model.
 
@@ -81,21 +81,20 @@ class Llama2:
             and loads the pre-trained model and tokenizer.
 
         """
-        if not torch.distributed.is_initialized():
-            torch.distributed.init_process_group("nccl")
-        if not model_parallel_is_initialized():
-            if model_parallel_size is None:
-                model_parallel_size = int(os.environ.get("WORLD_SIZE", 1))
-            initialize_model_parallel(model_parallel_size)
+        #TODO keep?
+        # if not model_parallel_is_initialized():
+        #     if model_parallel_size is None:
+        #         model_parallel_size = int(os.environ.get("WORLD_SIZE", 1))
+        #     initialize_model_parallel(model_parallel_size)
 
-        local_rank = int(os.environ.get("LOCAL_RANK", 0))
-        torch.cuda.set_device(local_rank)
+        # local_rank = int(os.environ.get("LOCAL_RANK", 0))
+        # torch.cuda.set_device(local_rank)
 
         # seed must be the same in all processes
-        torch.manual_seed(seed)
+        # torch.manual_seed(seed)
 
-        if local_rank > 0:
-            sys.stdout = open(os.devnull, "w")
+        # if local_rank > 0:
+        #     sys.stdout = open(os.devnull, "w")
 
         start_time = time.time()
         checkpoints = sorted(Path(ckpt_dir).glob("*.pth"))
@@ -120,56 +119,8 @@ class Llama2:
         model.load_state_dict(checkpoint, strict=False)
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
 
-        return Llama2(model, tokenizer)
+        return Llama3(model, tokenizer)
 
     def __init__(self, model: Transformer, tokenizer: Tokenizer):
         self.model = model
         self.tokenizer = tokenizer
-
-    @torch.inference_mode()
-    def generate(
-        self,
-        batch,
-    ):
-        """
-        Generate text sequences based on provided prompts using the language generation model.
-
-        Args:
-            prompt_tokens (List[List[int]]): List of tokenized prompts, where each prompt is represented as a list of integers.
-            max_gen_len (int): Maximum length of the generated text sequence.
-            temperature (float, optional): Temperature value for controlling randomness in sampling. Defaults to 0.6.
-            top_p (float, optional): Top-p probability threshold for nucleus sampling. Defaults to 0.9.
-            logprobs (bool, optional): Flag indicating whether to compute token log probabilities. Defaults to False.
-            echo (bool, optional): Flag indicating whether to include prompt tokens in the generated output. Defaults to False.
-
-        Returns:
-            Tuple[List[List[int]], Optional[List[List[float]]]]: A tuple containing generated token sequences and, if logprobs is True, corresponding token log probabilities.
-
-        Note:
-            This method uses the provided prompts as a basis for generating text. It employs nucleus sampling to produce text with controlled randomness.
-            If logprobs is True, token log probabilities are computed for each generated token.
-
-        """
-
-        tokens = batch['tokens'].to('cuda')
-        min_prompt_len = batch['min_prompt_len']
-        total_len = batch['total_len']
-        prev_pos = 0
-        #TODO figure this out may need to not do prev_pos:min_prompt_len
-        if min_prompt_len == total_len:
-            logits = self.model.forward(tokens, prev_pos)
-            #very unlikely to happen - tbh shouldnt during training 
-        else:
-            logits = self.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
-        return logits[:].squeeze()
-
-
-    def next_logits(
-        self,
-        batch,
-    ) -> List[ChatPrediction]:
-
-        logits = self.generate(
-            batch=batch
-        )
-        return logits
