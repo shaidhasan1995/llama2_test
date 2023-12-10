@@ -9,7 +9,7 @@ singularity exec --env HF_HOME=$HF_HOME --env PYTHONPATH=~/.local/lib/python3.8/
 --num_workers 8 \
 -ep 200 \
 --epoch_save_rate 1 \
--lr 0.000003 \
+-lr 0.0003 \
 --weight_decay 0 \
 --wandb_log_name "debug"
 

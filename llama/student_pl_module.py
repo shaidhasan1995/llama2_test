@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 from PIL import Image
-import pytorch_lightning as pl
+# import pytorch_lightning as pl
 import wandb  # Importing WandB for logging
 from llama.model import ModelArgs, Transformer
 from model2 import SimpleTransformer
@@ -14,13 +14,10 @@ from torch import nn
 
 
 # Define a function to calculate accuracy
-class StudentPLModule(pl.LightningModule):
+class StudentPLModule(nn.Module):
     def __init__(self, hparams):
         super(StudentPLModule, self).__init__()
-        if isinstance(hparams, dict):#passed in from model ckpt
-            self.hparams.update(hparams)
-        else:
-            self.hparams.update(vars(hparams))
+        self.hparams = hparams
         if self.hparams.loss_fn == 'smooth':
             self.loss_fn = nn.SmoothL1Loss(beta=1.0)
         elif self.hparams.loss_fn == 'cross_entropy':
@@ -34,17 +31,12 @@ class StudentPLModule(pl.LightningModule):
             tokenizer_path="tokenizer.model",
             max_seq_len=self.hparams.max_seq_len,
             max_batch_size=self.hparams.max_batch_size,
-        )
-        print("teacher number of params", sum(p.numel() for p in self.teacher_model.model.parameters()))
+        ) #TODO uncomment and ctrl f teacher_model uncomment
+        # print("teacher number of params", sum(p.numel() for p in self.teacher_model.model.parameters()))
 
         # self.student_model = Transformer(hparams)
         self.student_model = SimpleTransformer(hparams)
         self.student_model.weight_initialization()
-        # self.student_model = self.student_model.to(torch.float32)
-        # for param in self.student_model.parameters():
-        #     param.data = param.data.to(dtype=torch.float32)
-        # self.student_model = self.student_model.to(device="cuda")
-        # self.student_model = self.student_model.to(device=torch.device("cuda"), dtype=torch.float32)
 
             
 
@@ -72,20 +64,22 @@ class StudentPLModule(pl.LightningModule):
         prev_pos = 0
         if min_prompt_len == total_len:
             student_logits = self.student_model.forward(tokens, prev_pos, learning = (stage == "train"))
-            teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
+            # teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
             #very unlikely to happen - tbh shouldnt during training 
         else:
             #TODO figure this out may need to not do prev_pos:min_prompt_len, tbh i think is fine check after sanity check
             student_logits = self.student_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos, learning = (stage == "train"))
-            teacher_logits = self.teacher_model.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
+            # teacher_logits = self.teacher_model.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
         
         print("student_logits.mean()", student_logits.mean())
-        print("teacher_logits.mean()", teacher_logits.mean())
+        # print("teacher_logits.mean()", teacher_logits.mean()) TODO uncomment
+        # teacher_logits = teacher_logits.clone()
+        # teacher_logits = teacher_logits.to(dtype=torch.float16)
+        # teacher_logits.requires_grad = False
 
+        loss = 1 - student_logits.mean() #TODO try below
 
-
-        teacher_logits = teacher_logits.clone()
-        loss = self.loss_fn(student_logits, teacher_logits)
+        # loss = self.loss_fn(student_logits, teacher_logits) #TODO comment/uncomment
         return loss
 
         
@@ -127,6 +121,6 @@ class StudentPLModule(pl.LightningModule):
     def test_dataloader(self):
         return DataLoader(self.test_ds, batch_size=self.hparams.max_batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = False, shuffle = False)
 
-# TODO in dataloader callers add support for includes_rejected 
+# TODO in dataloader callers add support for includes_rejected and make train shuffle
     
 

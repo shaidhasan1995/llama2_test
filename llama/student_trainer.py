@@ -16,7 +16,7 @@ import numpy as np
 
 def main(args):
     logging.basicConfig(filename='logs/debug.log', level=logging.DEBUG)
-    torch.autograd.set_detect_anomaly(True) #TODO uncomment this
+    # torch.autograd.set_detect_anomaly(True) #TODO uncomment this
     if args.wandb:
         wandb.init(dir="logs/", 
            name=args.wandb_log_name, 
@@ -30,7 +30,8 @@ def main(args):
     model_trainer = StudentPLModule(args)
     model_trainer.cuda()
     model_trainer.setup(stage = "fit")
-    model_trainer = model_trainer.to(torch.float32)
+    model_trainer.train()
+    # model_trainer = model_trainer.to(torch.float32)
     train_dataloader = model_trainer.train_dataloader()
     val_dataloader = model_trainer.val_dataloader()
     optimizers, lr_schedulers = model_trainer.configure_optimizers()
@@ -54,6 +55,7 @@ def main(args):
 
 
             loss.backward()
+            print("torch grad enabled", torch.is_grad_enabled())
 
             for name, param in model_trainer.student_model.named_parameters():#TODO comment this block out
                 if param.grad is not None:
@@ -63,7 +65,6 @@ def main(args):
                     grad_norm = grad.norm().item()
 
                     # Log the statistics
-                    logging.debug(f"Layer: {name}, Gradient Mean: {grad_mean}, Gradient Std: {grad_std}, Gradient Norm: {grad_norm}")
                     logging.debug(f"Layer: {name}, Gradient Mean: {grad_mean}, Gradient Std: {grad_std}, Gradient Norm: {grad_norm}")
                     if torch.isinf(param.grad).any() or torch.isnan(param.grad).any():
                         logging.warning(f"Inf or NaN gradient in layer: {name}")
