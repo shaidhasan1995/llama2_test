@@ -155,7 +155,6 @@ class Llama2:
         min_prompt_len = batch['min_prompt_len']
         total_len = batch['total_len']
         prev_pos = 0
-        #TODO figure this out may need to not do prev_pos:min_prompt_len
         if min_prompt_len == total_len:
             logits = self.model.forward(tokens, prev_pos)
             #very unlikely to happen - tbh shouldnt during training 

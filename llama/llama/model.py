@@ -430,7 +430,7 @@ class Transformer(nn.Module):
 
         """
         super().__init__()
-        print("params", params)
+        # print("params", params)
         self.params = params
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
@@ -453,6 +453,21 @@ class Transformer(nn.Module):
             # Adding this multiplier instead of using 4096 directly allows for dynamism of token lengths while training or fine-tuning.
             self.params.dim // self.params.n_heads, self.params.max_seq_len * 2
         )
+
+    def weight_initialization(self):
+        def init_func(m):
+            if isinstance(m, nn.Linear):
+                print("initing weights")
+                nn.init.normal_(m.weight, mean=0.0, std=0.02)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            # Add other initializations if needed
+
+        self.apply(init_func)
 
     # @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int, learning = False):

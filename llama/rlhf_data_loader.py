@@ -70,7 +70,6 @@ class HHDataset(Dataset):
         # assert ( TODO check removing this doesnt break anything
         #     dialog[-1]["role"] == "user"
         # ), f"Last message must be from user, got {dialog[-1]['role']}"
-        # TODO may need to uncomment this and remove like most recent assistant token?
         dialog_tokens += self.tokenizer.encode(
             f"{B_INST} {(dialog[-1]['content']).strip()} {E_INST}",
             bos=True,
@@ -113,9 +112,10 @@ class HHDataset(Dataset):
     
 
 class TokenizationCollator:
-    def __init__(self, params):
+    def __init__(self, params, device = None):
         self.params = params
         self.tokenizer = Tokenizer(model_path='tokenizer.model')
+        self.device = device
 
 
     def __call__(self, prompt_tokens):
@@ -126,15 +126,23 @@ class TokenizationCollator:
 
         min_prompt_len = min(len(t) for t in prompt_tokens)
         max_prompt_len = max(len(t) for t in prompt_tokens)
-        print("max_prompt_len", max_prompt_len, "params.max_seq_len", params.max_seq_len)
-        assert max_prompt_len <= params.max_seq_len
+        if max_prompt_len >params.max_seq_len:
+            # print(f"max prompt len is {max_prompt_len} while max seq len is {params.max_seq_len}")
+            prompt_tokens = [t[:params.max_seq_len] for t in prompt_tokens]
+            #truncate 
+        # assert max_prompt_len <= params.max_seq_len, f"max prompt len is {max_prompt_len} while max seq len is {params.max_seq_len}"
         total_len = min(params.max_seq_len, max_gen_len + max_prompt_len)
-        print("total_len", total_len)
+        # print("total_len", total_len)
 
         pad_id = self.tokenizer.pad_id
-        tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long)
-        for k, t in enumerate(prompt_tokens):
-            tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long)
+        if self.device is None:
+            tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long)
+            for k, t in enumerate(prompt_tokens):
+                tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long)
+        else:
+            tokens = torch.full((bsz, total_len), pad_id, dtype=torch.long, device = self.device)
+            for k, t in enumerate(prompt_tokens):
+                tokens[k, : len(t)] = torch.tensor(t, dtype=torch.long, device = self.device)
 
         batch = {'tokens' : tokens, 'min_prompt_len' : min_prompt_len, 'total_len' : total_len}
         return batch

@@ -4,11 +4,14 @@ from PIL import Image
 import pytorch_lightning as pl
 import wandb  # Importing WandB for logging
 from llama.model import ModelArgs, Transformer
+from model2 import SimpleTransformer
 import torch.nn.functional as F
 from rlhf_data_loader import HHDataset, TokenizationCollator
 import os
-from llama import Llama3, Dialog # llama3 is version I made for using pl dist already
+from llama import Llama2, Dialog # llama3 is version I made for using pl dist already
 import torch.multiprocessing as mp
+from torch import nn
+
 
 # Define a function to calculate accuracy
 class StudentPLModule(pl.LightningModule):
@@ -19,68 +22,76 @@ class StudentPLModule(pl.LightningModule):
         else:
             self.hparams.update(vars(hparams))
         if self.hparams.loss_fn == 'smooth':
-            self.loss_fn = self.smooth_loss
+            self.loss_fn = nn.SmoothL1Loss(beta=1.0)
         elif self.hparams.loss_fn == 'cross_entropy':
-            self.loss_fn = self.cross_entropy_loss
+            self.loss_fn = nn.CrossEntropyLoss()
         else:
             raise ValueError(f"Invalid loss type specified {self.hparams.loss_fn}")
         
-        #TODO may need to change how teacher model is loaded
-        #TODO may need this line? mp.set_start_method('spawn', force=True)
-        # mp.set_start_method('spawn', force=True)
-        # self.teacher_model = Llama3.build(
-        #     ckpt_dir="llama-2-7b-chat/",
-        #     tokenizer_path="tokenizer.model",
-        #     max_seq_len=self.hparams.max_seq_len,
-        #     max_batch_size=self.hparams.max_batch_size,
-        # )
-        self.student_model = Transformer(hparams)
-        self.collate_fn = TokenizationCollator(self.student_model.params)
+        mp.set_start_method('spawn', force=True)
+        self.teacher_model = Llama2.build(
+            ckpt_dir="llama-2-7b-chat/",
+            tokenizer_path="tokenizer.model",
+            max_seq_len=self.hparams.max_seq_len,
+            max_batch_size=self.hparams.max_batch_size,
+        )
+        print("teacher number of params", sum(p.numel() for p in self.teacher_model.model.parameters()))
+
+        # self.student_model = Transformer(hparams)
+        self.student_model = SimpleTransformer(hparams)
+        self.student_model.weight_initialization()
+        # self.student_model = self.student_model.to(torch.float32)
+        # for param in self.student_model.parameters():
+        #     param.data = param.data.to(dtype=torch.float32)
+        # self.student_model = self.student_model.to(device="cuda")
+        # self.student_model = self.student_model.to(device=torch.device("cuda"), dtype=torch.float32)
+
+            
+
+        # print("student number of params requires grad", sum(p.numel() for p in self.student_model.parameters() if p.requires_grad))
+        print("student number of params", sum(p.numel() for p in self.student_model.parameters()))
+
+        self.collate_fn = TokenizationCollator(self.student_model.params, None)
+        
 
 
 
-    def smooth_loss(self, student_logits, teacher_logits):
-        beta = 1.0
-        return F.smooth_l1_loss(student_logits, teacher_logits, beta=beta)
-
-    # Cross-entropy loss function
-    def cross_entropy_loss(self, student_logits, teacher_logits):
-        return F.cross_entropy(student_logits, teacher_logits)
-
-    # Training step
     def training_step(self, batch, batch_idx):
         loss = self.eval_step(batch, batch_idx, "train")
         return loss
 
-    # Validation step
     def validation_step(self, batch, batch_idx):
         loss = self.eval_step(batch, batch_idx, "val")
         return loss
     
-    def eval_step(self, batch, batch_idx, step_type):
+    def eval_step(self, batch, batch_idx, stage):
         tokens = batch['tokens'].to('cuda')
+        # print("tokens.dtype", tokens.dtype) int 64
         min_prompt_len = batch['min_prompt_len']
         total_len = batch['total_len']
         prev_pos = 0
         if min_prompt_len == total_len:
-            student_logits = self.student_model.forward(tokens, prev_pos, learning = True)
-            teacher_logits = self.teacher_model.forward(tokens, prev_pos)
+            student_logits = self.student_model.forward(tokens, prev_pos, learning = (stage == "train"))
+            teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
             #very unlikely to happen - tbh shouldnt during training 
         else:
             #TODO figure this out may need to not do prev_pos:min_prompt_len, tbh i think is fine check after sanity check
-            student_logits = self.student_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos, learning = True)
-            teacher_logits = self.teacher_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
+            student_logits = self.student_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos, learning = (stage == "train"))
+            teacher_logits = self.teacher_model.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
         
-        print("student_logits.shape", student_logits.shape, "teacher_logits.shape", teacher_logits.shape)
+        print("student_logits.mean()", student_logits.mean())
+        print("teacher_logits.mean()", teacher_logits.mean())
+
+
+
+        teacher_logits = teacher_logits.clone()
         loss = self.loss_fn(student_logits, teacher_logits)
-        
-        self.log(f"{step_type}_loss", loss)
         return loss
 
         
     def configure_optimizers(self):
-        all_params = list(self.student_model.named_parameters())
-
+        all_params = list(self.student_model.parameters())
+        # print(all_params)
         optimizer_parameters = [
             {'params': all_params, 'weight_decay': self.hparams.weight_decay, 'lr': self.hparams.learning_rate}  # Weight decay for other parameters
         ]
@@ -108,13 +119,13 @@ class StudentPLModule(pl.LightningModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = True)
+        return DataLoader(self.train_ds, batch_size=self.hparams.max_batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = False)
 
     def val_dataloader(self):
-        return DataLoader(self.val_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = False)
+        return DataLoader(self.val_ds, batch_size=self.hparams.max_batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = True, shuffle = False)
 
     def test_dataloader(self):
-        return DataLoader(self.test_ds, batch_size=self.hparams.batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = False, shuffle = False)
+        return DataLoader(self.test_ds, batch_size=self.hparams.max_batch_size, collate_fn=self.collate_fn, num_workers=self.hparams.num_workers, persistent_workers=True, drop_last = False, shuffle = False)
 
 # TODO in dataloader callers add support for includes_rejected 
     

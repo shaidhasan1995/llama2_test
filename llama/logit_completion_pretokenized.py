@@ -15,7 +15,7 @@ def main(
     ckpt_dir: str,
     tokenizer_path: str,
     max_seq_len: int = 512,
-    max_batch_size: int = 8, #TODO try more vals
+    max_batch_size: int = 8,
     max_gen_len: Optional[int] = None,
 ):
     """
@@ -61,7 +61,6 @@ def main(
         print("idx", idx)
         print("logits.shape", logits.shape) #yields batch_size, tokens, vocab_len tensor
         print("tokens.shape", batch['tokens'].shape)
-        #TODO figure out why tokens is all same shape?
         torch.set_printoptions(threshold=5000)
 
         for sample_idx in range(logits.size(0)):

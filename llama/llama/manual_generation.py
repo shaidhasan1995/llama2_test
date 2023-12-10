@@ -81,7 +81,6 @@ class Llama3:
             and loads the pre-trained model and tokenizer.
 
         """
-        #TODO keep?
         # if not model_parallel_is_initialized():
         #     if model_parallel_size is None:
         #         model_parallel_size = int(os.environ.get("WORLD_SIZE", 1))
