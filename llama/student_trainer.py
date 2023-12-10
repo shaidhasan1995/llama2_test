@@ -16,7 +16,6 @@ import numpy as np
 
 def main(args):
     logging.basicConfig(filename='logs/debug.log', level=logging.DEBUG)
-    # torch.autograd.set_detect_anomaly(True) #TODO uncomment this
     if args.wandb:
         wandb.init(dir="logs/", 
            name=args.wandb_log_name, 
@@ -42,75 +41,29 @@ def main(args):
             loss = model_trainer.training_step(batch, batch_idx)
             if args.wandb:
                 wandb.log({"train_loss": loss.item()}, step=epoch * len(train_dataloader) + batch_idx)
-            print("loss", loss, "batch_idx", batch_idx)
-
-            #TODO comment this out
-            for name, param in model_trainer.student_model.named_parameters():#TODO comment this block out
-                weight_mean = param.data.mean().item()
-                weight_std = param.data.std().item()
-                weight_norm = param.data.norm().item()
-
-                # Log the weight statistics
-                logging.debug(f"Layer: {name}, Weight before backpropMean: {weight_mean}, Weight Std: {weight_std}, Weight Norm: {weight_norm}")
-
+            # print("loss", loss, "batch_idx", batch_idx)
 
             loss.backward()
-            print("torch grad enabled", torch.is_grad_enabled())
-
-            for name, param in model_trainer.student_model.named_parameters():#TODO comment this block out
-                if param.grad is not None:
-                    grad = param.grad
-                    grad_mean = grad.mean().item()
-                    grad_std = grad.std().item()
-                    grad_norm = grad.norm().item()
-
-                    # Log the statistics
-                    logging.debug(f"Layer: {name}, Gradient Mean: {grad_mean}, Gradient Std: {grad_std}, Gradient Norm: {grad_norm}")
-                    if torch.isinf(param.grad).any() or torch.isnan(param.grad).any():
-                        logging.warning(f"Inf or NaN gradient in layer: {name}")
-                else:
-                    # Log that this parameter has no gradient
-                    logging.debug(f"No gradient for {name}")
-            # for name, param in model_trainer.student_model.named_parameters(): 
-            #     if param.grad is not None:
-            #         # Convert the gradients to a string representation
-            #         grad_string = np.array2string(param.grad.cpu().detach().numpy())
-            #         # Log the name and gradient of the parameter
-            #         logging.debug(f"Gradient of {name}: {grad_string}")
-            #     else:
-            #         # Log that this parameter has no gradient
-            #         logging.debug(f"No gradient for {name}")
 
             for optimizer in optimizers:
-                for param_group in optimizer.param_groups:
-                    print("Learning rate:", param_group['lr'])
-                # for name, param in model_trainer.student_model.named_parameters():
-                #     if param.device.type != 'cuda' or param.dtype != torch.float32:
-                #         print(f"Parameter {name} is on {param.device} with dtype {param.dtype}")
-                # for name, buffer in model_trainer.student_model.named_buffers():
-                #     if buffer.device.type != 'cuda' or buffer.dtype != torch.float32:
-                #         print(f"Buffer {name} is on {buffer.device} with dtype {buffer.dtype}")
                 optimizer.step()
                 optimizer.zero_grad()
             for lr_scheduler in lr_schedulers:
                 lr_scheduler.step()
 
 
-            for name, param in model_trainer.student_model.named_parameters():#TODO comment this block out
-                weight_mean = param.data.mean().item()
-                weight_std = param.data.std().item()
-                weight_norm = param.data.norm().item()
-
-                # Log the weight statistics
-                logging.debug(f"Layer: {name}, Weights after backprop Mean: {weight_mean}, Weight Std: {weight_std}, Weight Norm: {weight_norm}")
-
-
         for batch_idx, batch in enumerate(tqdm(val_dataloader, desc='Validation')):
             loss = model_trainer.validation_step(batch, batch_idx)
             if args.wandb:
                 wandb.log({"val_loss": loss.item()}, step=epoch * len(train_dataloader) + batch_idx)
+            
+            
 
         if epoch % args.epoch_save_rate == 0:
+            # Check if the checkpoint directory exists, and if not, create it
+            if not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir)
+
             checkpoint_path = os.path.join(checkpoint_dir, f'epoch-{epoch:02d}.pt')
             torch.save({
                 'epoch': epoch,
@@ -118,8 +71,7 @@ def main(args):
                 'optimizer_state_dict': [optimizer.state_dict() for optimizer in optimizers],
                 # Include other relevant information if needed
             }, checkpoint_path)
-    
-    # TODO test ckpt every 5 ep and logging manually
+
 
 
 if __name__ == '__main__':
@@ -130,6 +82,9 @@ if __name__ == '__main__':
                         type=str, default='smooth')
     parser.add_argument("--includes_rejected", help="whether or not it includes rejected RLHF samples",
                         action="store_true", default=False)
+    parser.add_argument("--all_logits", help="uses all logits for KD instead of those truncated to min batch len",
+                        action="store_true", default=False)
+    
     parser.add_argument('--dim', type=int, default=4096, help='Dimension size')
     parser.add_argument('--n_layers', type=int, default=32, help='Number of layers')
     parser.add_argument('--n_heads', type=int, default=32, help='Number of heads')

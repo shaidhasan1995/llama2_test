@@ -4,14 +4,16 @@ singularity exec --env HF_HOME=$HF_HOME --env PYTHONPATH=~/.local/lib/python3.8/
 --n_layers 20 \
 --multiple_of 64 \
 --ffn_dim_multiplier 0.25 \
---loss_fn 'cross_entropy' \
--bs 32 \
+--loss_fn 'smooth' \
+-bs 16 \
 --num_workers 8 \
 -ep 200 \
 --epoch_save_rate 1 \
--lr 0.0003 \
+-lr 0.00001 \
 --weight_decay 0 \
---wandb_log_name "debug"
+--wandb_log_name "high_lr" \
+--wandb
+# --all_logits \
 
 #--wandb
 

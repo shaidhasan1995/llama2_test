@@ -31,14 +31,12 @@ class StudentPLModule(nn.Module):
             tokenizer_path="tokenizer.model",
             max_seq_len=self.hparams.max_seq_len,
             max_batch_size=self.hparams.max_batch_size,
-        ) #TODO uncomment and ctrl f teacher_model uncomment
-        # print("teacher number of params", sum(p.numel() for p in self.teacher_model.model.parameters()))
+        )
+        print("teacher number of params", sum(p.numel() for p in self.teacher_model.model.parameters()))
 
         # self.student_model = Transformer(hparams)
         self.student_model = SimpleTransformer(hparams)
         self.student_model.weight_initialization()
-
-            
 
         # print("student number of params requires grad", sum(p.numel() for p in self.student_model.parameters() if p.requires_grad))
         print("student number of params", sum(p.numel() for p in self.student_model.parameters()))
@@ -64,22 +62,23 @@ class StudentPLModule(nn.Module):
         prev_pos = 0
         if min_prompt_len == total_len:
             student_logits = self.student_model.forward(tokens, prev_pos, learning = (stage == "train"))
-            # teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
+            teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
             #very unlikely to happen - tbh shouldnt during training 
         else:
-            #TODO figure this out may need to not do prev_pos:min_prompt_len, tbh i think is fine check after sanity check
-            student_logits = self.student_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos, learning = (stage == "train"))
-            # teacher_logits = self.teacher_model.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
+            # print("tokens.shape", tokens.shape)
+            if self.hparams.all_logits:
+                student_logits = self.student_model.forward(tokens, prev_pos, learning = (stage == "train"))
+                teacher_logits = self.teacher_model.model.forward(tokens, prev_pos)
+            else:
+                #TODO check tokens[:, prev_pos:min_prompt_len]
+                student_logits = self.student_model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos, learning = (stage == "train"))
+                teacher_logits = self.teacher_model.model.forward(tokens[:, prev_pos:min_prompt_len], prev_pos)
         
-        print("student_logits.mean()", student_logits.mean())
-        # print("teacher_logits.mean()", teacher_logits.mean()) TODO uncomment
-        # teacher_logits = teacher_logits.clone()
-        # teacher_logits = teacher_logits.to(dtype=torch.float16)
-        # teacher_logits.requires_grad = False
+        # print("student_logits.shape", student_logits.shape)
+        # print("teacher_logits.shape", teacher_logits.shape)
+        teacher_logits = teacher_logits.clone()
 
-        loss = 1 - student_logits.mean() #TODO try below
-
-        # loss = self.loss_fn(student_logits, teacher_logits) #TODO comment/uncomment
+        loss = self.loss_fn(student_logits, teacher_logits)
         return loss
 
         
